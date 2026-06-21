@@ -1,0 +1,90 @@
+# ======================
+# Secrets / local config
+# ======================
+.env
+.env.*
+!.env.example
+
+# ======================
+# Python
+# ======================
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python build / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ======================
+# Node / frontend nếu có dùng
+# ======================
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ======================
+# App generated folders
+# ======================
+docx_temp/
+uploads/
+logs/
+*.log
+.temp/
+.tmp/
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# ======================
+# Test / coverage
+# ======================
+coverage/
+.nyc_output/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ======================
+# OS files
+# ======================
+.DS_Store
+Thumbs.db
+
+# ======================
+# IDE / editors
+# ======================
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# ======================
+# Plans / local notes
+# ======================
+plan/
+
+# ======================
+# Documents / generated files
+# ======================
+*.zip
+*.pdf
+*.docx

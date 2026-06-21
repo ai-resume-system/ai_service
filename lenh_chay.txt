@@ -1,0 +1,73 @@
+AI_SERVICE - LENH CHAY FLOW CHINH
+
+1. Di chuyen vao dung thu muc:
+   cd d:\DHTL\DoAnTotNghiep\ai-resume-system\ai_service
+
+2. Tao virtual environment neu may chua co:
+   py -m venv venv
+
+3. Kich hoat environment:
+   .\venv\Scripts\Activate.ps1
+
+4. Cai cac thu vien toi thieu neu environment moi chua co:
+   pip install uvicorn starlette pydantic python-dotenv openai
+
+5. Tao file .env tu .env.example va dien key toi thieu:
+   DEFAULT_PROVIDER=groq
+   PROVIDER_ORDER=groq,gemini,glm
+   GROQ_API_KEY=your_groq_key
+   GEMINI_API_KEY=your_gemini_key
+   GLM_API_KEY=your_glm_key
+   AI_SERVICE_API_KEY=internal-shared-secret
+
+   Ghi chu:
+   - Chi can API key la chay duoc vi code da co model mac dinh.
+   - GROQ_MODEL, GEMINI_MODEL va GLM_MODEL chi can dien khi muon doi model.
+   - Thu tu mac dinh la Groq -> Gemini -> GLM. Provider nao khong co API key se duoc bo qua.
+
+6. Dam bao backend_cv/.env dung cung gia tri:
+   AI_SERVICE_BASE_URL=http://localhost:8001
+   AI_SERVICE_API_KEY=internal-shared-secret
+
+7. Chay API noi bo cho backend:
+   uvicorn api:app --host 0.0.0.0 --port 8001 --reload
+
+8. Health check:
+   Invoke-WebRequest http://localhost:8001/health
+
+9. Test truc tiep API phan tich:
+   Invoke-RestMethod -Method Post -Uri http://localhost:8001/internal/cv/analyze `
+     -Headers @{ "x-internal-api-key" = "internal-shared-secret" } `
+     -ContentType "application/json" `
+     -Body '{
+       "cvId":"demo-cv-001",
+       "rawText":"Thuc tap sinh lap trinh web co kinh nghiem React, Laravel, MySQL va Git.",
+       "fileExtension":"pdf",
+       "requestedProvider":"groq",
+       "availableCareerCategories":[
+         {"name":"Cong nghe thong tin","slug":"cong-nghe-thong-tin"},
+         {"name":"Luat","slug":"luat"},
+         {"name":"Ke toan","slug":"ke-toan"}
+       ],
+       "availableSkills":[
+         {"name":"React","slug":"react","careerCategorySlug":"cong-nghe-thong-tin","aliases":["reactjs","react.js"]},
+         {"name":"Laravel","slug":"laravel","careerCategorySlug":"cong-nghe-thong-tin","aliases":[]},
+         {"name":"MySQL","slug":"mysql","careerCategorySlug":"cong-nghe-thong-tin","aliases":[]},
+         {"name":"Git","slug":"git","careerCategorySlug":"cong-nghe-thong-tin","aliases":[]}
+       ]
+     }'
+
+10. Neu direct API pass moi test tiep tu backend_cv:
+    - upload CV nhu cu
+    - POST /api/v1/cvs/:id/analyze
+    - GET /api/v1/cvs/:id/analysis
+
+11. Test fallback provider:
+    - tam thoi de trong GROQ_API_KEY
+    - restart uvicorn
+    - goi lai /internal/cv/analyze
+    - kiem tra log xem Gemini hoac GLM duoc dung
+
+12. Streamlit chi con la demo optional, khong nam trong flow chinh.
+    Neu ban van muon xem demo cu:
+    streamlit run main.py
