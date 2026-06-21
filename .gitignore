@@ -85,6 +85,7 @@ plan/
 # ======================
 # Documents / generated files
 # ======================
+*.txt
 *.zip
 *.pdf
 *.docx
