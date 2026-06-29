@@ -1,6 +1,8 @@
 import os
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
+# pyrefly: ignore [missing-import]
 from openai import OpenAI
 
 load_dotenv()

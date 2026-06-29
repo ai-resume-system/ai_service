@@ -13,8 +13,6 @@ frontend_cv
         -> backend_cv lưu cv_parsed_data và cv_skills
 ```
 
-`main.py` Streamlit chỉ còn là demo phụ, không nằm trong flow chính của hệ thống.
-
 ## Mục Tiêu
 
 - Nhận raw text của CV từ `backend_cv`.
@@ -33,9 +31,7 @@ frontend_cv
 - `schemas.py`: Pydantic schema cho request/response.
 - `resume_analyzer.py`: tạo prompt, gọi AI, parse JSON, validate response và fallback rule-based.
 - `llm_client.py`: cấu hình provider Groq, Gemini, GLM.
-- `main.py`: demo Streamlit cũ để upload PDF và xem phân tích nhanh.
 - `.env.example`: mẫu biến môi trường.
-- `lenh_chay.txt`: ghi chú lệnh chạy nhanh theo flow chính.
 
 ## API Chính
 
@@ -122,7 +118,6 @@ Response trả về trong field `data`, gồm các nhóm chính:
 - python-dotenv
 - OpenAI Python SDK
 - Groq/Gemini/GLM qua OpenAI-compatible endpoint
-- Streamlit, PyPDF2, pandas cho demo tùy chọn
 
 ## Yêu Cầu Cài Đặt
 
@@ -156,12 +151,6 @@ Cài thư viện tối thiểu cho flow chính:
 
 ```powershell
 pip install uvicorn starlette pydantic python-dotenv openai
-```
-
-Nếu muốn chạy demo Streamlit cũ:
-
-```powershell
-pip install streamlit PyPDF2 pandas
 ```
 
 ## Cấu Hình `.env`
@@ -313,14 +302,6 @@ Nếu toàn bộ provider lỗi, service dùng rule-based fallback và thêm fla
 ```txt
 rule_based_fallback_used
 provider_fallback_exhausted
-```
-
-## Demo Streamlit Tùy Chọn
-
-Streamlit không nằm trong flow chính. Nếu vẫn muốn xem demo upload PDF và phân tích thủ công:
-
-```powershell
-streamlit run main.py
 ```
 
 ## Lỗi Thường Gặp

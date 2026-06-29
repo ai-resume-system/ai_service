@@ -1,0 +1,11 @@
+services:
+  ai_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_service_app
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    ports:
+      - "8001:8001"

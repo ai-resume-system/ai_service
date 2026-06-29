@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -18,9 +19,19 @@ class SkillContext(BaseModel):
     name: str
     slug: str
     careerCategorySlug: str | None = None
+    careerCategoryName: str | None = None
+    parentSlug: str | None = None
+    parentName: str | None = None
     aliases: list[str] = Field(default_factory=list)
 
-    @field_validator("name", "slug", "careerCategorySlug")
+    @field_validator(
+        "name",
+        "slug",
+        "careerCategorySlug",
+        "careerCategoryName",
+        "parentSlug",
+        "parentName",
+    )
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
         if value is None:

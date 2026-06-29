@@ -8,28 +8,34 @@ from typing import Any
 from llm_client import get_client, get_model, get_provider_sequence
 from schemas import AnalyzeCvRequest, AnalyzeCvResponseData
 
-PROMPT_VERSION = "cv-analysis-v2"
+PROMPT_VERSION = "cv-analysis-v3-vi-output"
 MAX_INPUT_CHARS = max(int(os.getenv("AI_MAX_INPUT_CHARS", "12000")), 2000)
 LOGGER = logging.getLogger("ai_service.resume_analyzer")
 
 
 PROMPT_TEMPLATE = """
-You are an expert AI resume analysis engine for a recruitment platform.
+You are an expert AI resume analysis engine for a multi-industry recruitment platform.
 Return STRICT JSON only. Do not return markdown. Do not add explanation outside JSON.
 Do not invent facts that are not supported by the resume text.
 If information is missing or uncertain, keep the output conservative and record it in `confidenceFlags`.
 
+Mandatory language rules:
+- Keep all JSON keys exactly in English as defined by the schema below.
+- All user-facing string values MUST be written in natural Vietnamese with proper Vietnamese accents.
+- Do not return English sentences in `summary`, `strengths`, `weaknesses`, `improvementSuggestions`, `education.description`, `experience.description`, `projects.description`, `atsNotes`, or `evidence`.
+- Technical skill names may stay in their original form, for example React, Vue.js, MySQL, C#, C++, SQL Server.
+
 You are given:
 1. Resume raw text
 2. Active career categories from the system
-3. Active skills from the system, including aliases
+3. Relevant system skills pre-filtered by the backend, including aliases, parent skill group, and parent career category when available
 
 Your goals:
 1. Infer the candidate's professional profile
 2. Match resume skills against the provided system skills
 3. Suggest the most relevant career category from the provided category list
 4. Evaluate resume quality, readability, and ATS usefulness
-5. Provide concrete improvement suggestions
+5. Provide concrete improvement suggestions in Vietnamese
 6. Generate keywords and related job titles for later backend matching
 
 Scoring rules for `resumeQualityScore`:
@@ -41,16 +47,25 @@ Scoring rules for `resumeQualityScore`:
 - atsReadiness: 10%
 - presentationClarity: 10%
 
+Score scale rules:
+- `resumeQualityScore`, every `scoreBreakdown` field, and `careerCategorySuggestion.confidence` MUST use a 0-100 numeric scale.
+- Never use a 0-1 scale for these score fields. Use 80, not 0.8. Use 62, not 0.62.
+- Only skill confidence fields use a 0-1 scale: `matchedSkills[].confidence` and `otherDetectedSkills[].confidence`.
+
 Important constraints:
 - Do not create job IDs or database IDs
+- Do not assume the resume belongs to Information Technology; infer from the resume and the provided category/skill context
 - `careerCategorySuggestion` must come from the provided category list or be null
+- If a child skill belongs to a parent skill group, use the parent group and career category to support `careerCategorySuggestion`
 - `matchedSkills` should only contain skills that can be matched to the provided system skills
-- Skills detected but not confidently matched to system skills must go to `otherDetectedSkills`
+- Skills detected in the resume but not confidently matched to the system catalog must go to `otherDetectedSkills`
+- Split and normalize compact skill expressions such as "HTML/CSS/JS", "HTML, CSS, JS", "C#", "C++", "Vue.js", "React.js", "SQL Server" when there is evidence in the resume
 - `resumeQualityScore` is resume quality only, not a job matching score
+- Keep the response concise: at most 30 matchedSkills, 20 otherDetectedSkills, 5 suggestions, 5 strengths, 5 weaknesses, 5 experience items, and 5 projects
 
 Return this exact JSON shape:
 {{
-  "summary": "string",
+  "summary": "Vietnamese string",
   "resumeQualityScore": 0,
   "scoreBreakdown": {
     "roleClarity": 0,
@@ -75,7 +90,7 @@ Return this exact JSON shape:
       "normalizedName": "string",
       "confidence": 0,
       "level": "beginner | intermediate | advanced | expert | unknown",
-      "evidence": "string"
+      "evidence": "Vietnamese string"
     }
   ],
   "otherDetectedSkills": [
@@ -83,14 +98,14 @@ Return this exact JSON shape:
       "name": "string",
       "normalizedName": "string",
       "confidence": 0,
-      "evidence": "string"
+      "evidence": "Vietnamese string"
     }
   ],
   "keywords": ["string"],
   "relatedJobTitles": ["string"],
-  "strengths": ["string"],
-  "weaknesses": ["string"],
-  "improvementSuggestions": ["string"],
+  "strengths": ["Vietnamese string"],
+  "weaknesses": ["Vietnamese string"],
+  "improvementSuggestions": ["Vietnamese string"],
   "education": [
     {
       "school": "string",
@@ -98,7 +113,7 @@ Return this exact JSON shape:
       "fieldOfStudy": "string",
       "startDate": "string",
       "endDate": "string",
-      "description": "string"
+      "description": "Vietnamese string"
     }
   ],
   "experience": [
@@ -108,20 +123,20 @@ Return this exact JSON shape:
       "startDate": "string",
       "endDate": "string",
       "durationMonths": 0,
-      "description": "string",
-      "achievements": ["string"]
+      "description": "Vietnamese string",
+      "achievements": ["Vietnamese string"]
     }
   ],
   "projects": [
     {
       "name": "string",
       "role": "string",
-      "description": "string",
+      "description": "Vietnamese string",
       "technologies": ["string"],
-      "outcomes": ["string"]
+      "outcomes": ["Vietnamese string"]
     }
   ],
-  "atsNotes": ["string"],
+  "atsNotes": ["Vietnamese string"],
   "confidenceFlags": ["string"]
 }
 
@@ -154,7 +169,7 @@ def analyze_resume_text(request: AnalyzeCvRequest) -> AnalyzeCvResponseData:
                     "analyzedAt": datetime.now(timezone.utc),
                 }
             )
-            response.resumeQualityScore = _clamp_score(response.resumeQualityScore)
+            _normalize_response_scores(response)
             LOGGER.info(
                 "CV analysis succeeded with provider=%s model=%s cvId=%s",
                 provider,
@@ -209,7 +224,7 @@ def _request_analysis(
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.1,
-        "max_tokens": 2200,
+        "max_tokens": 2600,
         "timeout": timeout_ms / 1000,
     }
     if _supports_json_response_format(provider):
@@ -253,7 +268,7 @@ def _rule_based_fallback(request: AnalyzeCvRequest) -> AnalyzeCvResponseData:
                     "normalizedName": skill.slug,
                     "confidence": 0.7,
                     "level": "unknown",
-                    "evidence": f"Detected keyword for {skill.name}",
+                    "evidence": f"Phát hiện từ khóa liên quan đến {skill.name} trong CV.",
                 }
             )
 
@@ -264,7 +279,7 @@ def _rule_based_fallback(request: AnalyzeCvRequest) -> AnalyzeCvResponseData:
                     "name": token,
                     "normalizedName": token.lower(),
                     "confidence": 0.4,
-                    "evidence": "Detected from fallback keyword extraction",
+                    "evidence": "Phát hiện bằng cơ chế trích xuất từ khóa dự phòng.",
                 }
             )
 
@@ -290,7 +305,7 @@ def _rule_based_fallback(request: AnalyzeCvRequest) -> AnalyzeCvResponseData:
 
     return AnalyzeCvResponseData.model_validate(
         {
-            "summary": text[:400] or "Resume summary unavailable",
+            "summary": text[:400] or "Chưa có đủ nội dung CV để tóm tắt.",
             "resumeQualityScore": _clamp_score(weighted_score),
             "scoreBreakdown": score_breakdown,
             "primaryRole": _infer_primary_role(text),
@@ -308,18 +323,18 @@ def _rule_based_fallback(request: AnalyzeCvRequest) -> AnalyzeCvResponseData:
             "otherDetectedSkills": other_skills,
             "keywords": _extract_keywords(text)[:12],
             "relatedJobTitles": [_infer_primary_role(text)],
-            "strengths": ["Co noi dung CV de backend co the phan tich tiep"],
-            "weaknesses": ["AI fallback dang o muc co ban, do tin cay thap hon provider chinh"],
+            "strengths": ["CV có nội dung để hệ thống tiếp tục phân tích và so khớp."],
+            "weaknesses": ["Kết quả đang dùng cơ chế dự phòng nên độ chi tiết thấp hơn AI chính."],
             "improvementSuggestions": [
-                "Bo sung so lieu ket qua cong viec cu the",
-                "Lam ro vai tro chinh va cap do kinh nghiem",
-                "Bo sung them ky nang cong nghe/noi dung ATS quan trong",
+                "Bổ sung số liệu hoặc kết quả cụ thể cho kinh nghiệm và dự án.",
+                "Làm rõ vai trò chính, cấp độ kinh nghiệm và mục tiêu nghề nghiệp.",
+                "Bổ sung thêm kỹ năng quan trọng theo vị trí muốn ứng tuyển.",
             ],
             "education": [],
             "experience": [],
             "projects": [],
             "atsNotes": [
-                "Rule-based fallback duoc su dung, can kiem tra lai ket qua",
+                "Hệ thống đã dùng cơ chế phân tích dự phòng, nên cần kiểm tra lại kết quả.",
             ],
             "confidenceFlags": ["rule_based_fallback_used"],
             "provider": "rule-based",
@@ -346,23 +361,49 @@ def _extract_keywords(text: str) -> list[str]:
 def _infer_primary_role(text: str) -> str:
     lowered = text.lower()
     role_hints = [
-        "backend developer",
-        "frontend developer",
-        "full stack developer",
-        "devops engineer",
-        "data analyst",
-        "product designer",
-        "ui ux designer",
-        "project manager",
+        ("backend developer", "Lập trình viên Backend"),
+        ("frontend developer", "Lập trình viên Frontend"),
+        ("full stack developer", "Lập trình viên Fullstack"),
+        ("devops engineer", "Kỹ sư DevOps"),
+        ("data analyst", "Chuyên viên phân tích dữ liệu"),
+        ("product designer", "Thiết kế sản phẩm"),
+        ("ui ux designer", "Thiết kế UI/UX"),
+        ("project manager", "Quản lý dự án"),
     ]
-    for role in role_hints:
-        if role in lowered:
-            return role.title()
-    return "Professional Candidate"
+    for keyword, label in role_hints:
+        if keyword in lowered:
+            return label
+    return "Ứng viên chuyên môn"
+
+
+def _normalize_response_scores(response: AnalyzeCvResponseData) -> None:
+    response.resumeQualityScore = _clamp_score(response.resumeQualityScore)
+    response.scoreBreakdown.roleClarity = _clamp_score(response.scoreBreakdown.roleClarity)
+    response.scoreBreakdown.skillCoverage = _clamp_score(response.scoreBreakdown.skillCoverage)
+    response.scoreBreakdown.experienceQuality = _clamp_score(
+        response.scoreBreakdown.experienceQuality
+    )
+    response.scoreBreakdown.impactEvidence = _clamp_score(
+        response.scoreBreakdown.impactEvidence
+    )
+    response.scoreBreakdown.educationRelevance = _clamp_score(
+        response.scoreBreakdown.educationRelevance
+    )
+    response.scoreBreakdown.atsReadiness = _clamp_score(response.scoreBreakdown.atsReadiness)
+    response.scoreBreakdown.presentationClarity = _clamp_score(
+        response.scoreBreakdown.presentationClarity
+    )
+    if response.careerCategorySuggestion:
+        response.careerCategorySuggestion.confidence = _clamp_score(
+            response.careerCategorySuggestion.confidence
+        )
 
 
 def _clamp_score(value: float) -> float:
-    return max(0, min(100, round(float(value), 2)))
+    score = float(value)
+    if 0 < score <= 1:
+        score *= 100
+    return max(0, min(100, round(score, 2)))
 
 
 def _supports_json_response_format(provider: str) -> bool:
