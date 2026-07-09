@@ -1,9 +1,11 @@
+name: ai_resume_local
+
 services:
   ai_service:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ai_service_app
+    container_name: ai_service
     restart: unless-stopped
     env_file:
       - ./.env
